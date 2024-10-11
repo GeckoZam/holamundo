@@ -1,1 +1,76 @@
+---
+- name: Deploy ASP.NET Core Hello World app
+  hosts: localhost
+  connection: local
+  become: yes
+  tasks:
+    - name: Instalar dependencias necesarias (curl, apt-transport-https, etc.)
+      apt:
+        name: 
+          - curl
+          - apt-transport-https
+          - lsb-release
+        state: present
+        update_cache: yes
 
+    - name: Agregar el repositorio oficial de Microsoft .NET
+      shell: |
+        curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-archive-keyring.gpg
+        curl https://packages.microsoft.com/config/ubuntu/{{ ansible_distribution_major_version }}/prod.list > /etc/apt/sources.list.d/microsoft.list
+      args:
+        creates: /etc/apt/sources.list.d/microsoft.list
+
+    - name: Instalar .NET SDK 8
+      apt:
+        name: dotnet-sdk-8.0  # Reemplaza con la versión 8 de .NET
+        state: present
+
+    - name: Verificar que .NET está instalado
+      command: dotnet --version
+      register: dotnet_version
+
+    - name: Mostrar la versión de .NET instalada
+      debug:
+        msg: "La versión de .NET instalada es {{ dotnet_version.stdout }}"
+
+    - name: Crear la aplicación web ASP.NET Core "Hola Mundo"
+      shell: |
+        mkdir -p /home/ubuntu/dotnet-hello-world
+        cd /home/ubuntu/dotnet-hello-world
+        dotnet new web -n HelloWorldApp
+      args:
+        creates: /home/ubuntu/dotnet-hello-world/HelloWorldApp
+
+    - name: Modificar el archivo Program.cs para incluir el puerto 5000
+      lineinfile:
+        path: /home/ubuntu/dotnet-hello-world/HelloWorldApp/Program.cs
+        regexp: 'UseUrls'
+        line: 'webBuilder.UseUrls("http://0.0.0.0:5000");'
+
+    - name: Ejecutar la aplicación ASP.NET Core
+      shell: |
+        cd /home/ubuntu/dotnet-hello-world/HelloWorldApp
+        dotnet run &
+      async: 60
+      poll: 0
+
+    - name: Esperar 10 segundos para asegurarse de que la aplicación esté corriendo
+      pause:
+        seconds: 10
+
+    - name: Verificar que la aplicación está corriendo en el puerto 5000
+      uri:
+        url: http://localhost:5000
+        method: GET
+      register: result
+
+    - name: Mostrar el resultado de la solicitud HTTP
+      debug:
+        msg: "La respuesta de la aplicación es: {{ result.content }}"
+
+- name: Playbook de Hola Mundo
+  hosts: servers
+  tasks:
+    - name: Mostrar Hola Mundo
+      debug:
+        msg: "¡Hola Mundo desde Ansible!"
